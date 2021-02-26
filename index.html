@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>Agora</title>
+  <link href="jquery-ui-1.12.1.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: "Trebuchet MS", sans-serif;
+      margin: 0px;
+      background-color: black;
+    }
+
+    .demoHeaders {
+      margin-top: 2em;
+    }
+
+    #dialog-link {
+      padding: .4em 1em .4em 20px;
+      text-decoration: none;
+      position: relative;
+    }
+
+    #dialog-link span.ui-icon {
+      margin: 0 5px 0 0;
+      position: absolute;
+      left: .2em;
+      top: 50%;
+      margin-top: -8px;
+    }
+
+    #icons {
+      margin: 0;
+      padding: 0;
+    }
+
+    #icons li {
+      margin: 2px;
+      position: relative;
+      padding: 4px 0;
+      cursor: pointer;
+      float: left;
+      list-style: none;
+    }
+
+    #icons span.ui-icon {
+      float: left;
+      margin: 0 4px;
+    }
+
+    .fakewindowcontain .ui-widget-overlay {
+      position: absolute;
+    }
+
+    select {
+      width: 200px;
+    }
+
+    .localVideo {
+      width: 320px;
+      height: 180px;
+    }
+
+    .remoteVideo {
+      width: 240px;
+      height: 135px;
+    }
+
+    .remoteVideoBig {
+      width: 1280px;
+      height: 720px;
+    }
+  </style>
+
+  <!-- Agora -->
+  <script src="scripts/appID.js"></script>
+  <script src="scripts/jquery-3.4.1.min.js"></script>
+  <script src="scripts/AgoraSDK.js"></script>
+  <script src="scripts/AgoraRTC.js"></script>
+  <!-- /Agora -->
+
+  <script src="scripts/jquery-ui-1.12.1.js"></script>
+  <script src="scripts/index.js"></script>
+</head>
+
+<body>
+  <div class="ui-widget">
+    <div class="ui-state-highlight ui-corner-all" style="margin-top: 20px; padding: 0 .7em;">
+      <p><span class="ui-icon ui-icon-info" style="float: left; margin-right: .3em;"></span>
+        4.3.0
+      </p>
+    </div>
+  </div>
+  <div id="Settings">
+    <ul>
+      <li><a href="#DeviceSettings">Device Settings</a></li>
+      <li><a href="#ChannelSettings">Channel Settings</a></li>
+    </ul>
+    <div id="DeviceSettings">
+      <div id="Devices">
+        <ul>
+          <li><a href="#VideoSettings">Video Settings</a></li>
+          <li><a href="#AudioSettings">Audio Settings</a></li>
+        </ul>
+        <div id="VideoSettings">
+          <fieldset>
+            <legend>Video feed</legend>
+            <label for="MuteLocalVideo">Mute local video stream</label>
+            <input type="checkbox" name="MuteLocalVideo" id="MuteLocalVideo">
+            <br>
+            <label for="VideoFeedSource">Video Feed Source</label>
+            <select name="VideoFeedSource" id="VideoFeedSource">
+              <option value="camera">Camera</option>
+              <option value="screen">Screen</option>
+            </select>
+          </fieldset>
+          <br>
+          <fieldset>
+            <legend>Video recording device</legend>
+            <div id="VideoDevice"></div>
+          </fieldset>
+          <br>
+          <fieldset>
+            <legend>High video encoder config</legend>
+            <div id="HighVideoDimensions">
+              <label for="HighEncoderWidth" class="ui-controlgroup-label">Width</label>
+              <input id="HighEncoderWidth" class="ui-spinner-input">
+              <label for="HighEncoderHeight" class="ui-controlgroup-label">Height</label>
+              <input id="HighEncoderHeight" class="ui-spinner-input">
+            </div>
+            <br>
+            <div id="HighVideoFrameRate">
+              <label for="HighVideoFPS" class="ui-controlgroup-label">FPS</label>
+              <input id="HighVideoFPS" class="ui-spinner-input">
+            </div>
+            <br>
+            <div id="HighVideoBitrate">
+              <label for="HighVideoBitrateMin" class="ui-controlgroup-label">Bitrate Min</label>
+              <input id="HighVideoBitrateMin" class="ui-spinner-input">
+              <label for="HighVideoBitrateMax" class="ui-controlgroup-label">Bitrate Max</label>
+              <input id="HighVideoBitrateMax" class="ui-spinner-input">
+            </div>
+            <br>
+            <label for="DegradationPreference">Degradation Preference</label>
+            <select name="DegradationPreference" id="DegradationPreference">
+              <option value="detail">Quality</option>
+              <option value="motion">Framerate</option>
+              <option value="balanced">Balanced</option>
+            </select>
+          </fieldset>
+          <br>
+          <fieldset id="LowVidEncoderConfig">
+            <legend>Low video encoder config</legend>
+            <div id="LowVideoDimensions">
+              <label for="LowEncoderWidth" class="ui-controlgroup-label">Width</label>
+              <input id="LowEncoderWidth" class="ui-spinner-input">
+              <label for="LowEncoderHeight" class="ui-controlgroup-label">Height</label>
+              <input id="LowEncoderHeight" class="ui-spinner-input">
+            </div>
+            <br>
+            <div id="LowVideoFrameRate">
+              <label for="LowVideoFPS" class="ui-controlgroup-label">FPS</label>
+              <input id="LowVideoFPS" class="ui-spinner-input">
+            </div>
+            <br>
+            <label for="LowVideoBitrate" class="ui-controlgroup-label">Bitrate</label>
+            <input id="LowVideoBitrate" class="ui-spinner-input">
+          </fieldset>
+          <br>
+          <fieldset>
+            <legend>Local video config</legend>
+            <label for="MirrorMode">Mirror Mode</label>
+            <input type="checkbox" name="MirrorMode" id="MirrorMode">
+            <br>
+            <label for="VideoFit">Video Fit</label>
+            <select name="VideoFit" id="VideoFit">
+              <option value="cover">Cover</option>
+              <option value="contain">Contain</option>
+              <option value="fill">Fill</option>
+            </select>
+          </fieldset>
+          <br>
+          <button name="ApplyEncoding" id="ApplyEncoding">Apply Encoding Settings</button>
+        </div>
+        <div id="AudioSettings">
+          <fieldset>
+            <legend>Video feed</legend>
+            <label for="MuteLocalAudio">Mute local audio stream</label>
+            <input type="checkbox" name="MuteLocalAudio" id="MuteLocalAudio">
+          </fieldset>
+          <br>
+          <fieldset>
+            <legend>Audio recording device</legend>
+            <div id="AudioRecordignDevice"></div>
+            <br>
+            <label for="AudioRecordignVolume">Volume</label>
+            <div id="AudioRecordignVolume"></div>
+          </fieldset>
+          <br>
+          <fieldset>
+            <legend>Audio recording encoder config</legend>
+            <div id="AudioRecordingBitrate">
+              <label for="AudioBitrate" class="ui-controlgroup-label">Bitrate</label>
+              <input id="AudioBitrate" class="ui-spinner-input">
+            </div>
+            <div id="AudioRecordingSampleRate">
+              <label for="AudioSampleRate" class="ui-controlgroup-label">Sample Rate</label>
+              <input id="AudioSampleRate" class="ui-spinner-input">
+            </div>
+            <label for="AudioStereo">Stereo</label>
+            <input type="checkbox" name="AudioStereo" id="AudioStereo">
+            <label for="AudioAEC">Echo Cancell</label>
+            <input type="checkbox" name="AudioAEC" id="AudioAEC">
+            <label for="AudioAGC">Volume Gain</label>
+            <input type="checkbox" name="AudioAGC" id="AudioAGC">
+            <label for="AudioANS">Noise Suppression</label>
+            <input type="checkbox" name="AudioANS" id="AudioANS">
+          </fieldset>
+          <br>
+          <button name="ApplyAudioEncoding" id="ApplyAudioEncoding">Apply Audio Encoding Settings</button>
+        </div>
+      </div>
+    </div>
+    <div id="ChannelSettings">
+      <fieldset>
+        <legend>Channel Config</legend>
+        <label for="ClientRole">Client Role</label>
+        <select name="ClientRole" id="ClientRole">
+          <option value="host">Broadcaster</option>
+          <option value="audience">Audience</option>
+        </select>
+        <br>
+        <label for="ChannelID">Channel ID</label>
+        <input type="text" id="ChannelID"></input>
+        <br>
+        <label for="ChannelPassword">Channel Password</label>
+        <input name="ChannelPassword" id="ChannelPassword"></input>
+        <br>
+        <label for="EncryptionType">Encryption Type</label>
+        <select name="EncryptionType" id="EncryptionType">
+          <option value="aes-128-xts">aes-128-xts</option>
+          <option value="aes-256-xts">aes-256-xts</option>
+          <option value="aes-128-ecb">aes-128-ecb</option>
+          <option value="sm4-128-ecb">sm4-128-ecb</option>
+          <option>none</option>
+        </select>
+      </fieldset>
+      <br>
+      <div id="URLSettings">
+        <fieldset>
+          <legend>URL inject settings</legend>
+          <label for="VideoURL">URL Stream</label>
+          <input type="VideoURL" id="VideoURL"></input>
+          <br>
+          <div id="URLVideoDimensions">
+            <label for="URLEncoderWidth" class="ui-controlgroup-label">Width</label>
+            <input id="URLEncoderWidth" class="ui-spinner-input">
+            <label for="URLEncoderHeight" class="ui-controlgroup-label">Height</label>
+            <input id="URLEncoderHeight" class="ui-spinner-input">
+          </div>
+          <br>
+          <div id="URLVideoFrameRate">
+            <label for="URLVideoFPS" class="ui-controlgroup-label">FPS</label>
+            <input id="URLVideoFPS" class="ui-spinner-input">
+          </div>
+          <br>
+          <div id="URLVideoBitrateRange">
+            <label for="URLVideoBitrate" class="ui-controlgroup-label">Video Bitrate</label>
+            <input id="URLVideoBitrate" class="ui-spinner-input">
+          </div>
+          <br>
+          <div id="URLAudioBitrateRange">
+            <label for="URLAudioBitrate" class="ui-controlgroup-label">Audio Bitrate</label>
+            <input id="URLAudioBitrate" class="ui-spinner-input">
+          </div>
+          <br>
+          <div id="URLAudioSampleRateRange">
+            <label for="URLAudioSampleRate" class="ui-controlgroup-label">Audio Sample Rate</label>
+            <input id="URLAudioSampleRate" class="ui-spinner-input">
+          </div>
+          <br>
+          <label for="URLAudioStereo">Stereo</label>
+          <input type="checkbox" name="URLAudioStereo" id="URLAudioStereo">
+          <br>
+          <label for="URLAudioVolume">Volume</label>
+          <div id="URLAudioVolume"></div>
+          <br>
+          <button name="InjectStreamURL" id="InjectStreamURL">Inject Stream Url</button>
+        </fieldset>
+      </div>
+      <br>
+      <fieldset>
+        <legend>gogogogogoo</legend>
+        <button name="JoinChannel" id="JoinChannel">Join Channel</button>
+      </fieldset>
+    </div>
+    <div id="Call">
+      <fieldset>
+        <legend>Local</legend>
+        <div id="localVideoFeed"></div>
+      </fieldset>
+      <fieldset>
+        <legend>Remote</legend>
+        <div id="remoteVideoFeed"></div>
+      </fieldset>
+    </div>
+  </div>
+</body>
+
+</html>
