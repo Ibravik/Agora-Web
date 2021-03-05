@@ -2,13 +2,14 @@ var onCall = false;
 var injectStreamUrl = false;
 var localVideoMute = false;
 var localAudioMute = false;
+var videoSource = eVIDEO_FEED.kCAMERA;
 var channelConfig = {
   channelName: "",
   encryptionKey: "",
   encryptionType: eENCRYPTION_TYPE.kAES_128_XTS,
   clientID: 0
 };
-var screenVideoEncoder = {
+var screenEncoder = {
   bitrateMax: 4500,
   bitrateMin: 4000,
   frameRate: 10,
@@ -16,7 +17,15 @@ var screenVideoEncoder = {
   width: 1920,
   degradationPreference: eDEGRADATION_PREFERENCE.kQUALITY
 };
-var highVideoEncoder = {
+var videoEncoder = {
+  bitrateMax: 4500,
+  bitrateMin: 4000,
+  frameRate: 10,
+  degradationPreference: eDEGRADATION_PREFERENCE.kQUALITY,
+  source: "videos/vid1.mp4",
+  mediaStream: null
+};
+var cameraEncoder = {
   bitrateMax: 800,
   bitrateMin: 500,
   frameRate: 15,
@@ -24,17 +33,17 @@ var highVideoEncoder = {
   width: 640,
   degradationPreference: eDEGRADATION_PREFERENCE.kBALANCED
 };
-var encoderConfig = highVideoEncoder;
-var localVideoPlayConfig = {
-  fit: eLOCAL_VIDEO_FIT.kCOVER,
-  mirror: false,
-  localPlayObj: null
-};
 var lowVideoEncoder = {
   bitrate: 140,
   framerate: 7,
   height: 180,
   width: 320
+};
+var encoderConfig = cameraEncoder;
+var localVideoPlayConfig = {
+  fit: eLOCAL_VIDEO_FIT.kCOVER,
+  mirror: false,
+  localPlayObj: null
 };
 var audioEncoder = {
   bitrate: 128,
@@ -79,8 +88,21 @@ function RemoveLocalUI() {
 
 function UpdateVideoEncoderConfig(_config) {
   encoderConfig = _config;
-  $("#HighEncoderWidth").prop("value", _config.width);
-  $("#HighEncoderHeight").prop("value", _config.height);
+  if (videoSource == eVIDEO_FEED.kFILE) {
+    $("#HighEncoderWidthLabel").hide("slow");
+    $("#HighEncoderHeightLabel").hide("slow");
+    $("#HighEncoderWidth").hide("slow");
+    $("#HighEncoderHeight").hide("slow");
+  }
+  else {
+    $("#HighEncoderWidthLabel").show("slow");
+    $("#HighEncoderHeightLabel").show("slow");
+    $("#HighEncoderWidth").show("slow");
+    $("#HighEncoderHeight").show("slow");
+    $("#HighEncoderWidth").prop("value", _config.width);
+    $("#HighEncoderHeight").prop("value", _config.height);
+  }
+
   $("#HighVideoFPS").prop("value", _config.frameRate);
   $("#HighVideoBitrateMin").prop("value", _config.bitrateMin);
   $("#HighVideoBitrateMax").prop("value", _config.bitrateMax);
@@ -97,8 +119,31 @@ function ShowLowVideoEncoderSettings(_switchFlag) {
   }
 }
 
-function EnableURLSettings(_switchFlag)
-{
+function ShowSourceVideo(_switchFlag) {
+  if (_switchFlag) {
+    $("#VideoSourceSelection").show("slow");
+    let videoPlayer = $("#VideoPlayer")[0];
+
+    videoPlayer.pause();
+    $("#VideoSource").attr("src", videoEncoder.source);
+    videoPlayer.load();
+
+    videoEncoder.mediaStream = videoPlayer.captureStream(videoEncoder.frameRate);
+    SetFileVideoFeed(videoEncoder.mediaStream, function () {
+      EnableLocalVideo("local_stream_video", !localVideoMute);
+    });
+  }
+  else {
+    $("#VideoSourceSelection").hide("slow");
+    let videoPlayer = $("#VideoPlayer")[0];
+
+    videoPlayer.pause();
+    $("#VideoSource").attr("src", "");
+    videoPlayer.load();
+  }
+}
+
+function EnableURLSettings(_switchFlag) {
   $("#VideoURL").prop("disabled", !_switchFlag);
   $("#URLEncoderWidth").spinner("option", "disabled", !_switchFlag);
   $("#URLEncoderHeight").spinner("option", "disabled", !_switchFlag);
@@ -236,12 +281,10 @@ function onUserJoin(_user) {
     $("#remote_stream_cb_muteAudio_" + _user.uid).checkboxradio("option", "disabled", true);
     let switchFlag = $("#remote_stream_cb_muteAudio_" + _user.uid)[0].checked;
     MuteRemoteAudioStream(_user.uid, !switchFlag, function () {
-      if (switchFlag)
-      {
+      if (switchFlag) {
         $("#remote_stream_muteAudio_" + _user.uid).html("Unmute Audio");
       }
-      else
-      {
+      else {
         $("#remote_stream_muteAudio_" + _user.uid).html("Mute Audio");
       }
       $("#remote_stream_cb_muteAudio_" + _user.uid).checkboxradio("option", "disabled", false);
@@ -251,25 +294,21 @@ function onUserJoin(_user) {
   $("#remote_stream_cb_muteVideo_" + _user.uid).on("click", function () {
     let switchFlag = $("#remote_stream_cb_muteVideo_" + _user.uid)[0].checked;
     EnableRemoteVideo("remote_stream_video_" + _user.uid, _user.uid, !switchFlag);
-    if (switchFlag)
-    {
+    if (switchFlag) {
       $("#remote_stream_muteVideo_" + _user.uid).html("Unmute Video");
     }
-    else
-    {
+    else {
       $("#remote_stream_muteVideo_" + _user.uid).html("Mute Video");
     }
     $("#remote_stream_cb_muteVideo_" + _user.uid).checkboxradio("option", "checked", switchFlag);
   });
   $("#remote_stream_cb_FS_" + _user.uid).on("click", function () {
     let switchFlag = $("#remote_stream_cb_FS_" + _user.uid)[0].checked;
-    if (switchFlag)
-    {
+    if (switchFlag) {
       $("#remote_stream_FS_" + _user.uid).html("Fullscreen");
       $("#remote_stream_video_" + _user.uid).attr("class", "remoteVideoBig");
     }
-    else
-    {
+    else {
       $("#remote_stream_FS_" + _user.uid).html("Normal");
       $("#remote_stream_video_" + _user.uid).attr("class", "remoteVideo");
     }
@@ -283,6 +322,8 @@ function onUserLeave(_user) {
 }
 
 $(function () {
+  'use strict'
+
   // <!-- Agora -->
   if (!GetCompatibilityStatus()) {
     return;
@@ -456,6 +497,13 @@ $(function () {
     }
   });
 
+  $("#VideoOptions").selectmenu({
+    select: function (_event, _ui) {
+      videoEncoder.source = _ui.item.value;
+      ShowSourceVideo(true);
+    }
+  });
+
   $("#MirrorMode").checkboxradio();
   $("#MirrorMode").on("click", function () {
     localVideoPlayConfig.mirror = $("#MirrorMode")[0].checked;
@@ -514,13 +562,13 @@ $(function () {
   $("#ApplyEncoding").on("click", function () {
     $("#ApplyEncoding").button("option", "disabled", true);
     SetLocalPlayConfiguration(localVideoPlayConfig);
-    SetHighVideoEncoderConfiguration(highVideoEncoder, function () {
-      console.log("lkjgfkjasdgfkjasgdkjfhasghkdfghjkasd")
-      SetLowVideoEncoderConfiguration(lowVideoEncoder, function () {
-        console.log("lkjgfkjasdgfkjasgdkjfhasghkdfghjkasd2")
-        SetScreenEncoderConfiguration(screenVideoEncoder, function () {
-          console.log("lkjgfkjasdgfkjasgdkjfhasghkdfghjkasd3")
-          $("#ApplyEncoding").button("option", "disabled", false);
+    SetLowVideoEncoderConfiguration(lowVideoEncoder, function () {
+      SetHighVideoEncoderConfiguration(cameraEncoder, function () {
+        SetScreenEncoderConfiguration(screenEncoder, function () {
+          videoEncoder.mediaStream = $("#VideoPlayer")[0].captureStream(videoEncoder.frameRate);
+          SetFileEncoderConfiguration(videoEncoder, function () {
+            $("#ApplyEncoding").button("option", "disabled", false);
+          });
         });
       });
     });
@@ -595,20 +643,28 @@ $(function () {
 
   $("#VideoFeedSource").selectmenu({
     select: function (_event, _ui) {
+      videoSource = _ui.item.value;
       switch (_ui.item.value) {
         case eVIDEO_FEED.kCAMERA:
-          UpdateVideoEncoderConfig(highVideoEncoder);
+          UpdateVideoEncoderConfig(cameraEncoder);
           ShowLowVideoEncoderSettings(true);
-          EnableScreenShare(false, function () {
+          ShowSourceVideo(false);
+          SetCameraVideoFeed(function () {
             EnableLocalVideo("local_stream_video", !localVideoMute);
           });
           break;
         case eVIDEO_FEED.kSCREEN:
-          UpdateVideoEncoderConfig(screenVideoEncoder);
+          UpdateVideoEncoderConfig(screenEncoder);
           ShowLowVideoEncoderSettings(false);
-          EnableScreenShare(true, function () {
+          ShowSourceVideo(false);
+          SetScreenVideoFeed(function () {
             EnableLocalVideo("local_stream_video", !localVideoMute);
           });
+          break;
+        case eVIDEO_FEED.kFILE:
+          UpdateVideoEncoderConfig(videoEncoder);
+          ShowLowVideoEncoderSettings(false);
+          ShowSourceVideo(true);
           break;
       };
     }
@@ -728,5 +784,6 @@ $(function () {
   });
 
   EnableURLSettings(false);
-  UpdateVideoEncoderConfig(highVideoEncoder);
+  ShowSourceVideo(false);
+  UpdateVideoEncoderConfig(cameraEncoder);
 });

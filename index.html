@@ -113,6 +113,7 @@
             <select name="VideoFeedSource" id="VideoFeedSource">
               <option value="camera">Camera</option>
               <option value="screen">Screen</option>
+              <option value="video">Video</option>
             </select>
           </fieldset>
           <br>
@@ -124,9 +125,9 @@
           <fieldset>
             <legend>High video encoder config</legend>
             <div id="HighVideoDimensions">
-              <label for="HighEncoderWidth" class="ui-controlgroup-label">Width</label>
+              <label id="HighEncoderWidthLabel" for="HighEncoderWidth" class="ui-controlgroup-label">Width</label>
               <input id="HighEncoderWidth" class="ui-spinner-input">
-              <label for="HighEncoderHeight" class="ui-controlgroup-label">Height</label>
+              <label id="HighEncoderHeightLabel" for="HighEncoderHeight" class="ui-controlgroup-label">Height</label>
               <input id="HighEncoderHeight" class="ui-spinner-input">
             </div>
             <br>
@@ -148,6 +149,23 @@
               <option value="motion">Framerate</option>
               <option value="balanced">Balanced</option>
             </select>
+            <br>
+            <br>
+            <fieldset id="VideoSourceSelection">
+              <legend>Video source file</legend>
+              <label for="VideoOptions">Video Source</label>
+              <select name="VideoOptions" id="VideoOptions">
+                <option value="videos/vid1.mp4">Video 1</option>
+                <option value="videos/vid2.mp4">Video 2</option>
+                <option value="videos/vid3.mp4">Video 3</option>
+                <option value="videos/vid4.mp4">Video 4</option>
+                <option value="videos/vid5.mp4">Video 5</option>
+              </select>
+              <br>
+              <video id="VideoPlayer" width="240" height="135" controls>
+                <source id="VideoSource" src="" type="video/mp4"/>
+              </video>
+            </fieldset>
           </fieldset>
           <br>
           <fieldset id="LowVidEncoderConfig">

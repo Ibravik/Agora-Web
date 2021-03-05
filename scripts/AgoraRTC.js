@@ -40,7 +40,8 @@ const eDEGRADATION_PREFERENCE = {
  */
 const eVIDEO_FEED = {
   kCAMERA: "camera",
-  kSCREEN: "screen"
+  kSCREEN: "screen",
+  kFILE: "video"
 };
 
 /**
@@ -80,7 +81,8 @@ var _rtcEngine = {
   audioRecordignVolume: 500,
   videoFeed: eVIDEO_FEED.kCAMERA,
   muteVideo: false,
-  muteAudio: false
+  muteAudio: false,
+  onCall: false
 };
 
 /**
@@ -89,8 +91,10 @@ var _rtcEngine = {
 var _LocalTracks = {
   screenVideoTrack: null,
   screenAudioTrack: null,
-  videoTrack: null,
-  audioTrack: null
+  fileVideoTrack: null,
+  fileAudioTrack: null,
+  cameraTrack: null,
+  microphoneTrack: null
 };
 
 /**
@@ -174,7 +178,7 @@ var _VideoEncoderConfig = {
   | 3840 * 2160 | 60               | 6500                |
   */
 
-  screenConfig: {
+  screen: {
     bitrateMax: 4500,
     bitrateMin: 4000,
     frameRate: 10,
@@ -182,7 +186,7 @@ var _VideoEncoderConfig = {
     width: 1920,
     degradationPreference: eDEGRADATION_PREFERENCE.kQUALITY
   },
-  highConfig: {
+  camera: {
     bitrateMax: 800,
     bitrateMin: 500,
     frameRate: 15,
@@ -190,7 +194,15 @@ var _VideoEncoderConfig = {
     width: 640,
     degradationPreference: eDEGRADATION_PREFERENCE.kBALANCED
   },
-  lowConfig: {
+  file: {
+    bitrateMax: 4500,
+    bitrateMin: 4000,
+    frameRate: 10,
+    degradationPreference: eDEGRADATION_PREFERENCE.kQUALITY,
+    source: "",
+    mediaStream: null
+  },
+  low: {
     bitrate: 140,
     framerate: 7,
     height: 180,
@@ -276,11 +288,15 @@ function _GetAudioTrack()
 {
   if (_rtcEngine.videoFeed == eVIDEO_FEED.kCAMERA)
   {
-    return _LocalTracks.audioTrack;
+    return _LocalTracks.microphoneTrack;
   }
   else if (_rtcEngine.videoFeed == eVIDEO_FEED.kSCREEN)
   {
     return _LocalTracks.screenAudioTrack;
+  }
+  else if (_rtcEngine.videoFeed == eVIDEO_FEED.kFILE)
+  {
+    return _LocalTracks.fileAudioTrack;
   }
   return null;
 }
@@ -294,11 +310,15 @@ function _GetVideoTrack()
 {
   if (_rtcEngine.videoFeed == eVIDEO_FEED.kCAMERA)
   {
-    return _LocalTracks.videoTrack;
+    return _LocalTracks.cameraTrack;
   }
   else if (_rtcEngine.videoFeed == eVIDEO_FEED.kSCREEN)
   {
     return _LocalTracks.screenVideoTrack;
+  }
+  else if (_rtcEngine.videoFeed == eVIDEO_FEED.kFILE)
+  {
+    return _LocalTracks.fileVideoTrack;
   }
   return null;
 }
@@ -497,18 +517,21 @@ function SetAudioRecordingVolume(_volume)
  */
 async function SetHighVideoEncoderConfiguration(_encoderConfig, _callback)
 {
-  if (_LocalTracks.videoTrack != null)
-  {
-    await _LocalTracks.videoTrack.setEncoderConfiguration(_encoderConfig);
-    await _LocalTracks.videoTrack.setOptimizationMode(_encoderConfig.degradationPreference);
+  _VideoEncoderConfig.camera = _encoderConfig;
+  if (_rtcEngine.videoFeed == eVIDEO_FEED.kCAMERA)
+  { 
+    await SetCameraVideoFeed();
+    if (_LocalVideoPlayConfig.localPlayObj)
+    {
+      EnableLocalVideo(_LocalVideoPlayConfig.localPlayObj, true);
+    }
   }
 
   if (_callback)
   {
     _callback();
   }
-  _VideoEncoderConfig.highConfig = _encoderConfig;
-  _Log(_VideoEncoderConfig.highConfig);
+  _Log(_VideoEncoderConfig.camera);
 }
 
 /**
@@ -525,20 +548,22 @@ async function SetLowVideoEncoderConfiguration(_encoderConfig, _callback)
 { 
   if (_rtcEngine.client != null)
   {
+    let videoTrack = _GetVideoTrack();
+
     // unpublish the published items
-    if (_LocalTracks.videoTrack != null)
+    if (videoTrack != null)
     {
-      await _rtcEngine.client.unpublish(_LocalTracks.videoTrack);
+      await _rtcEngine.client.unpublish(videoTrack);
     }
     
     // change settings
     _rtcEngine.client.setLowStreamParameter(_encoderConfig);
 
     // publish the published items
-    if (_LocalTracks.videoTrack != null)
+    if (videoTrack != null)
     {
-      _rtcEngine.client.publish(_LocalTracks.videoTrack);
-      _LocalTracks.videoTrack.setEnabled(!_rtcEngine.muteVideo);
+      await _rtcEngine.client.publish(videoTrack);
+      videoTrack.setEnabled(!_rtcEngine.muteVideo);
     }
   }
 
@@ -546,8 +571,8 @@ async function SetLowVideoEncoderConfiguration(_encoderConfig, _callback)
   {
     _callback();
   }
-  _VideoEncoderConfig.lowConfig = _encoderConfig;
-  _Log(_VideoEncoderConfig.lowConfig);
+  _VideoEncoderConfig.low = _encoderConfig;
+  _Log(_VideoEncoderConfig.low);
 }
 
 /**
@@ -560,37 +585,21 @@ async function SetLowVideoEncoderConfiguration(_encoderConfig, _callback)
  */
 async function SetScreenEncoderConfiguration(_encoderConfig, _callback)
 {
-  if (_LocalTracks.screenVideoTrack != null)
-  {
-    if (_LocalTracks.screenVideoTrack != null)
+  _VideoEncoderConfig.screen = _encoderConfig;
+  if (_rtcEngine.videoFeed == eVIDEO_FEED.kSCREEN)
+  { 
+    await SetScreenVideoFeed();
+    if (_LocalVideoPlayConfig.localPlayObj)
     {
-      await _rtcEngine.client.unpublish(_LocalTracks.screenVideoTrack);
-      _LocalTracks.screenVideoTrack.stop();
-      _LocalTracks.screenVideoTrack.close();
-      _LocalTracks.screenVideoTrack = null;
-    }
-
-    let screenConfig = {
-      encoderConfig: _encoderConfig,
-      optimizationMode: _encoderConfig.degradationPreference
-    };
-
-    [_LocalTracks.screenVideoTrack] = await Promise.all([
-      AgoraRTC.createScreenVideoTrack(screenConfig)
-    ]);
-    if (_LocalTracks.screenVideoTrack != null)
-    {
-      await _rtcEngine.client.publish(_LocalTracks.screenVideoTrack);
-      _LocalTracks.screenVideoTrack.setEnabled(!_rtcEngine.muteVideo);
+      EnableLocalVideo(_LocalVideoPlayConfig.localPlayObj, true);
     }
   }
-
+  
   if (_callback)
   {
     _callback();
   }
-  _VideoEncoderConfig.screenConfig = _encoderConfig;
-  _Log(_VideoEncoderConfig.screenConfig);
+  _Log(_VideoEncoderConfig.screen);
 }
 
 /**
@@ -711,109 +720,11 @@ async function SetRemoteVideoQuality(_userID, _qualityType, _callback)
 //int EnableRemoteVideoSuperResolution(const unsigned int _userID, const bool _switchFlag) const;
 
 /**
- * @brief   Stop/Resume sharing the screen in the stream.
- * @param   #Boolean: The switch flag.
+ * @brief   Set the camera to be video source in track.
  * @param   #function: Succest callback().
  * @bug     No know Bugs.
  */
-async function EnableScreenShare(_switchFlag, _callback)
-{
-  // disable current video stream
-  let videoTrack = _GetVideoTrack();
-  let audioTrack = _GetAudioTrack();
-
-  if (!videoTrack && !audioTrack)
-  {
-    _rtcEngine.videoFeed = (_switchFlag ? eVIDEO_FEED.kSCREEN : eVIDEO_FEED.kCAMERA);
-    return;
-  }
-
-  if (videoTrack)
-  {
-    await _rtcEngine.client.unpublish(videoTrack);
-    videoTrack.stop();
-    videoTrack.close();
-    videoTrack = null;
-  }
-  if (audioTrack)
-  {
-    await _rtcEngine.client.unpublish(audioTrack);
-    audioTrack.stop();
-    audioTrack.close();
-    audioTrack = null;
-  }
-
-  // update feed flag
-  _rtcEngine.videoFeed = (_switchFlag ? eVIDEO_FEED.kSCREEN : eVIDEO_FEED.kCAMERA);
-
-  // prepare stream config
-  let vidConfig = {
-    cameraId: "",
-    encoderConfig: _VideoEncoderConfig.highConfig,
-    facingMode: "user",
-    optimizationMode: _VideoEncoderConfig.highConfig.degradationPreference
-  };
-  let audioConfig = {
-    microphoneId: "",
-    AEC: _AudioEncoderConfig.AEC,
-    AGC: _AudioEncoderConfig.AGC,
-    ANS: _AudioEncoderConfig.ANS,
-    encoderConfig: _AudioEncoderConfig
-  };
-  let screenConfig = {
-    encoderConfig: _VideoEncoderConfig.screenConfig,
-    optimizationMode: _VideoEncoderConfig.screenConfig.degradationPreference
-  };
-  
-  // Create the local stream 
-  if (_rtcEngine.videoFeed == eVIDEO_FEED.kCAMERA)
-  {
-    [_LocalTracks.videoTrack, _LocalTracks.audioTrack] = await Promise.all([
-      AgoraRTC.createCameraVideoTrack(vidConfig),
-      AgoraRTC.createMicrophoneAudioTrack(audioConfig)
-    ]);
-  }
-  else if (_rtcEngine.videoFeed == eVIDEO_FEED.kSCREEN)
-  {
-    let tracks = null;
-    [tracks] = await Promise.all([
-      AgoraRTC.createScreenVideoTrack(screenConfig, "auto")
-    ]);
-
-    if (tracks && tracks.length && tracks.length > 1)
-    {
-      _LocalTracks.screenVideoTrack = tracks[0];
-      _LocalTracks.screenAudioTrack = tracks[1];
-    }
-    else
-    {
-      _LocalTracks.screenVideoTrack = tracks;
-      [_LocalTracks.screenAudioTrack] = await Promise.all([
-        AgoraRTC.createMicrophoneAudioTrack(audioConfig)
-      ]);
-    }
-  }
-  
-  // publish local stream
-  let track = _GetVideoTrack();
-  if (track)
-  {
-    await _rtcEngine.client.publish(track);
-    track.setEnabled(!_rtcEngine.muteVideo);
-  }
-  track = _GetAudioTrack();
-  if (track)
-  {
-    track.setVolume(_rtcEngine.audioRecordignVolume);
-    await _rtcEngine.client.publish(track);
-    track.setEnabled(!_rtcEngine.muteAudio);
-  }
-
-  if (_callback)
-  {
-    _callback();
-  }
-}
+//function EnableScreenShare(_callback)
 
 /**
  * @brief   Stop/Resume sharing a window in the stream.
@@ -944,7 +855,7 @@ function MuteRemoteAudioStream(_userID, _switchFlag, _callback)
 async function JoinChannel(_settings, _callback = null)
 {
   // avoid bad calls if the engine are not ready
-  if (_rtcEngine.client == null)
+  if (_rtcEngine.client == null || _rtcEngine.onCall)
   {
     return;
   }
@@ -960,83 +871,35 @@ async function JoinChannel(_settings, _callback = null)
 
   // set the channel client role
   _rtcEngine.client.setClientRole(_ClientSettings.role);
-  
-  // prepare stream config
-  let vidConfig = {
-    cameraId: "",
-    encoderConfig: _VideoEncoderConfig.highConfig,
-    facingMode: "user",
-    optimizationMode: _VideoEncoderConfig.highConfig.degradationPreference
-  };
-  let audioConfig = {
-    microphoneId: "",
-    AEC: _AudioEncoderConfig.AEC,
-    AGC: _AudioEncoderConfig.AGC,
-    ANS: _AudioEncoderConfig.ANS,
-    encoderConfig: _AudioEncoderConfig
-  };
-  let screenConfig = {
-    encoderConfig: _VideoEncoderConfig.screenConfig,
-    optimizationMode: _VideoEncoderConfig.screenConfig.degradationPreference
-  };
-  
+   
   // set local video config
-  await SetLowVideoEncoderConfiguration(_VideoEncoderConfig.lowConfig);
-
-  // Create the local stream 
-  if (_rtcEngine.videoFeed == eVIDEO_FEED.kCAMERA)
-  {
-    [_LocalTracks.videoTrack, _LocalTracks.audioTrack] = await Promise.all([
-      AgoraRTC.createCameraVideoTrack(vidConfig),
-      AgoraRTC.createMicrophoneAudioTrack(audioConfig)
-    ]);
-  }
-  else if (_rtcEngine.videoFeed == eVIDEO_FEED.kSCREEN)
-  {
-    let tracks = null;
-    [tracks] = await Promise.all([
-      AgoraRTC.createScreenVideoTrack(screenConfig, "auto")
-    ]);
-
-    if (tracks && tracks.length && tracks.length > 1)
-    {
-      _LocalTracks.screenVideoTrack = tracks[0];
-      _LocalTracks.screenAudioTrack = tracks[1];
-    }
-    else
-    {
-      _LocalTracks.screenVideoTrack = tracks;
-      [_LocalTracks.screenAudioTrack] = await Promise.all([
-        AgoraRTC.createMicrophoneAudioTrack(audioConfig)
-      ]);
-    }
-  }
+  await SetLowVideoEncoderConfiguration(_VideoEncoderConfig.low);
 
   // Join to the channel
   [_ChannelSettings.clientID] = await Promise.all([
     _rtcEngine.client.join(appID, _settings.channelName, null, _settings.clientID)
   ]);
- 
-  // publish local stream
-  let track = _GetVideoTrack();
-  if (track)
+  _rtcEngine.onCall = true;
+
+  // Create the local stream 
+  if (_rtcEngine.videoFeed == eVIDEO_FEED.kCAMERA)
   {
-    await _rtcEngine.client.publish(track);
-    track.setEnabled(!_rtcEngine.muteVideo);
+    await SetCameraVideoFeed();
   }
-  track = _GetAudioTrack();
-  if (track)
+  else if (_rtcEngine.videoFeed == eVIDEO_FEED.kSCREEN)
   {
-    track.setVolume(_rtcEngine.audioRecordignVolume);
-    await _rtcEngine.client.publish(track);
-    track.setEnabled(!_rtcEngine.muteAudio);
+    await SetScreenVideoFeed();
+  }
+  else if (_rtcEngine.videoFeed == eVIDEO_FEED.kFILE)
+  {
+    await SetFileVideoFeed(_VideoEncoderConfig.file.mediaStream);
   }
   
   if (_callback)
   {
     _callback(_ChannelSettings.clientID);
   }
-
+  
   _ChannelSettings.channelName = _settings.channelName;
   _ChannelSettings.encryptionKey = _settings.encryptionKey;
   _ChannelSettings.encryptionType = _settings.encryptionType;
@@ -1060,11 +923,11 @@ async function LeaveChannel(_callback)
   await _rtcEngine.client.leave();
 
   // unpublish local stream
-  if (_LocalTracks.videoTrack)
+  if (_LocalTracks.cameraTrack)
   {
-    _LocalTracks.videoTrack.stop();
-    _LocalTracks.videoTrack.close();
-    _LocalTracks.videoTrack = null;
+    _LocalTracks.cameraTrack.stop();
+    _LocalTracks.cameraTrack.close();
+    _LocalTracks.cameraTrack = null;
   }
   if (_LocalTracks.screenVideoTrack)
   {
@@ -1072,11 +935,11 @@ async function LeaveChannel(_callback)
     _LocalTracks.screenVideoTrack.close();
     _LocalTracks.screenVideoTrack = null;
   }
-  if (_LocalTracks.audioTrack)
+  if (_LocalTracks.microphoneTrack)
   {
-    _LocalTracks.audioTrack.stop();
-    _LocalTracks.audioTrack.close();
-    _LocalTracks.audioTrack = null;
+    _LocalTracks.microphoneTrack.stop();
+    _LocalTracks.microphoneTrack.close();
+    _LocalTracks.microphoneTrack = null;
   }
   if (_LocalTracks.screenAudioTrack)
   {
@@ -1084,6 +947,7 @@ async function LeaveChannel(_callback)
     _LocalTracks.screenAudioTrack.close();
     _LocalTracks.screenAudioTrack = null;
   }
+  _rtcEngine.onCall = false;
   
   if (_callback)
   {
@@ -1193,14 +1057,16 @@ function EnableLocalVideo(_localVideo, _switchFlag)
   {
     if (_switchFlag)
     {
+      _LocalVideoPlayConfig.localPlayObj = _localVideo;
       _GetVideoTrack().play(_localVideo, _LocalVideoPlayConfig);
     }
     else
     {
+      _LocalVideoPlayConfig.localPlayObj = null;
       _GetVideoTrack().stop();
     }
   }
-  _LocalVideoPlayConfig.localPlayObj = _localVideo;
+  
   _Log(_LocalVideoPlayConfig);
 }
 
@@ -1239,28 +1105,28 @@ async function SetAudioEncoderConfiguration(_encoderConfig, _callback)
 {
   if (_rtcEngine.client != null)
   {
-    if (_LocalTracks.audioTrack != null)
+    if (_LocalTracks.microphoneTrack != null)
     {
-      _LocalTracks.audioTrack.stop();
-      _LocalTracks.audioTrack.close();
-      _LocalTracks.audioTrack = null;
+      _LocalTracks.microphoneTrack.stop();
+      _LocalTracks.microphoneTrack.close();
+      _LocalTracks.microphoneTrack = null;
 
-      let audioConfig = {
+      let microphoneConfig = {
         microphoneId: "",
         AEC: _encoderConfig.AEC,
         AGC: _encoderConfig.AGC,
         ANS: _encoderConfig.ANS,
         encoderConfig: _encoderConfig
       };
-      [_LocalTracks.audioTrack] = await Promise.all([
-        AgoraRTC.createMicrophoneAudioTrack(audioConfig)
+      [_LocalTracks.microphoneTrack] = await Promise.all([
+        AgoraRTC.createMicrophoneAudioTrack(microphoneConfig)
       ]);
       
-      if (_LocalTracks.audioTrack)
+      if (_LocalTracks.microphoneTrack)
       {
-        _LocalTracks.audioTrack.setVolume(_rtcEngine.audioRecordignVolume);
-        await _rtcEngine.client.publish(_LocalTracks.audioTrack);
-        _LocalTracks.audioTrack.setEnabled(!_rtcEngine.muteAudio);
+        _LocalTracks.microphoneTrack.setVolume(_rtcEngine.audioRecordignVolume);
+        await _rtcEngine.client.publish(_LocalTracks.microphoneTrack);
+        _LocalTracks.microphoneTrack.setEnabled(!_rtcEngine.muteAudio);
       }
     }
   }
@@ -1302,4 +1168,288 @@ function GetRemoteVideoStats(_userID)
     return null;
   }
   return _rtcEngine.client.getRemoteVideoStats()[_userID];
+}
+
+/**
+ * @brief   Set the camera to be video source in track.
+ * @param   #function: Succest callback().
+ * @bug     No know Bugs.
+ */
+async function SetCameraVideoFeed(_callback)
+{
+  // avoid bad calls
+  if (!_rtcEngine.onCall)
+  {
+    // update feed flag
+    _rtcEngine.videoFeed = eVIDEO_FEED.kCAMERA;
+    return;
+  }
+
+  // disable current video stream
+  await _UnpublishTracks();
+  
+  // update feed flag
+  _rtcEngine.videoFeed = eVIDEO_FEED.kCAMERA;
+
+  // prepare stream config
+  let cameraConfig = {
+    cameraId: "",
+    encoderConfig: _VideoEncoderConfig.camera,
+    facingMode: "user",
+    optimizationMode: _VideoEncoderConfig.camera.degradationPreference
+  };
+  let microphoneConfig = {
+    microphoneId: "",
+    AEC: _AudioEncoderConfig.AEC,
+    AGC: _AudioEncoderConfig.AGC,
+    ANS: _AudioEncoderConfig.ANS,
+    encoderConfig: _AudioEncoderConfig
+  };
+
+  // Create the local stream 
+  [_LocalTracks.cameraTrack, _LocalTracks.microphoneTrack] = await Promise.all([
+    AgoraRTC.createCameraVideoTrack(cameraConfig),
+    AgoraRTC.createMicrophoneAudioTrack(microphoneConfig)
+  ]);
+  
+  // publish local stream
+  await _PublishTracks();
+ 
+  if (_callback)
+  {
+    _callback();
+  }
+}
+
+/**
+ * @brief   Set the screen to be video source in track.
+ * @param   #function: Succest callback().
+ * @bug     No know Bugs.
+ */
+async function SetScreenVideoFeed(_callback)
+{
+  // avoid bad calls
+  if (!_rtcEngine.onCall)
+  {
+    // update feed flag
+    _rtcEngine.videoFeed = eVIDEO_FEED.kSCREEN;
+    return;
+  }
+
+  // disable current video stream
+  await _UnpublishTracks();
+
+  // update feed flag
+  _rtcEngine.videoFeed = eVIDEO_FEED.kSCREEN;
+
+  // prepare stream config
+  let screenConfig = {
+    encoderConfig: _VideoEncoderConfig.screen,
+    optimizationMode: _VideoEncoderConfig.screen.degradationPreference
+  };
+  
+  // Create the local stream 
+  let tracks = null;
+  [tracks] = await Promise.all([
+    AgoraRTC.createScreenVideoTrack(screenConfig, "auto")
+  ]);
+  console.log(tracks)
+  if (tracks && tracks.length && tracks.length > 1)
+  {
+    _LocalTracks.screenVideoTrack = tracks[0];
+    _LocalTracks.screenAudioTrack = tracks[1];
+  }
+  else
+  {
+    let microphoneConfig = {
+      microphoneId: "",
+      AEC: _AudioEncoderConfig.AEC,
+      AGC: _AudioEncoderConfig.AGC,
+      ANS: _AudioEncoderConfig.ANS,
+      encoderConfig: _AudioEncoderConfig
+    };
+    _LocalTracks.screenVideoTrack = tracks;
+    [_LocalTracks.screenAudioTrack] = await Promise.all([
+      AgoraRTC.createMicrophoneAudioTrack(microphoneConfig)
+    ]);
+  }
+  
+  // publish local stream
+  await _PublishTracks();
+
+  if (_callback)
+  {
+    _callback();
+  }
+}
+
+/**
+ * @brief   Set the file to be video source in track.
+ * @param   #MediaStream : The MediaStream interface represents a stream of media content.
+ * @param   #function: Succest callback().
+ * @bug     No know Bugs.
+ */
+async function SetFileVideoFeed(_mediaStream, _callback)
+{
+  _VideoEncoderConfig.file.mediaStream = _mediaStream;
+
+  // avoid bad calls
+  if (!_rtcEngine.onCall)
+  {
+    // update feed flag
+    _rtcEngine.videoFeed = eVIDEO_FEED.kFILE;
+
+    return;
+  }
+
+  // disable current video stream
+  await _UnpublishTracks();
+
+  // update feed flag
+  _rtcEngine.videoFeed = eVIDEO_FEED.kFILE;
+
+  // prepare stream config
+  let videoConfig = {
+    bitrateMax: _VideoEncoderConfig.file.bitrateMax,
+    bitrateMin: _VideoEncoderConfig.file.bitrateMin,
+    mediaStreamTrack: _mediaStream.getVideoTracks()[0],
+    optimizationMode: _VideoEncoderConfig.file.degradationPreference
+  };
+  let audioConfig = {
+    encoderConfig: _AudioEncoderConfig,
+    mediaStreamTrack: _mediaStream.getAudioTracks()[0]    
+  };
+
+  // Create the local stream 
+  if (videoConfig.mediaStreamTrack)
+  {
+    [_LocalTracks.fileVideoTrack] = await Promise.all([
+      AgoraRTC.createCustomVideoTrack(videoConfig)
+    ]);
+  }
+  else
+  {
+    let cameraConfig = {
+      cameraId: "",
+      encoderConfig: _VideoEncoderConfig.camera,
+      facingMode: "user",
+      optimizationMode: _VideoEncoderConfig.camera.degradationPreference
+    };
+    [_LocalTracks.fileVideoTrack] = await Promise.all([
+      AgoraRTC.createCameraVideoTrack(cameraConfig)
+    ]);
+  }
+
+  // Create the local stream 
+  if (audioConfig.mediaStreamTrack)
+  {
+    [_LocalTracks.fileAudioTrack] = await Promise.all([
+      AgoraRTC.createCustomAudioTrack(audioConfig)
+    ]);
+  }
+  else
+  {
+    let microphoneConfig = {
+      microphoneId: "",
+      AEC: _AudioEncoderConfig.AEC,
+      AGC: _AudioEncoderConfig.AGC,
+      ANS: _AudioEncoderConfig.ANS,
+      encoderConfig: _AudioEncoderConfig
+    };
+    [_LocalTracks.fileAudioTrack] = await Promise.all([
+      AgoraRTC.createMicrophoneAudioTrack(microphoneConfig)
+    ]);
+  }
+
+  // publish local stream
+  await _PublishTracks();
+ 
+  if (_callback)
+  {
+    _callback();
+  }
+}
+
+/**
+ * @brief   Disable the current active tracks in stream.
+ * @bug     No know Bugs.
+ */
+async function _UnpublishTracks()
+{
+  // disable current video stream
+  let videoTrack = _GetVideoTrack();
+  let audioTrack = _GetAudioTrack();
+
+  if (videoTrack)
+  {
+    await _rtcEngine.client.unpublish(videoTrack);
+    videoTrack.stop();
+    videoTrack.close();
+    videoTrack = null;
+  }
+  if (audioTrack)
+  {
+    await _rtcEngine.client.unpublish(audioTrack);
+    audioTrack.stop();
+    audioTrack.close();
+    audioTrack = null;
+  }
+
+  _LocalTracks = {
+    screenVideoTrack: null,
+    screenAudioTrack: null,
+    fileVideoTrack: null,
+    fileAudioTrack: null,
+    cameraTrack: null,
+    microphoneTrack: null
+  };
+}
+
+/**
+ * @brief   Disable the current active tracks in stream.
+ * @bug     No know Bugs.
+ */
+async function _PublishTracks()
+{
+  // publish local stream
+  let videoTrack = _GetVideoTrack();
+  let audioTrack = _GetAudioTrack();
+
+  if (videoTrack)
+  {
+    await _rtcEngine.client.publish(videoTrack);
+    videoTrack.setEnabled(!_rtcEngine.muteVideo);
+  }
+  if (audioTrack)
+  {
+    audioTrack.setVolume(_rtcEngine.audioRecordignVolume);
+    await _rtcEngine.client.publish(audioTrack);
+    audioTrack.setEnabled(!_rtcEngine.muteAudio);
+  }
+}
+
+/**
+ * @brief   Updates the video sharing parameters.
+ * @param   #Object: the encoder config { bitrateMax(Number), bitrateMin(Number), 
+ *                                        degradationPreference(eDEGRADATION_PREFERENCE) }.
+ * @param   #function: Succest callback().
+ * @bug     No know Bugs.
+ */
+async function SetFileEncoderConfiguration(_encoderConfig, _callback)
+{
+  _VideoEncoderConfig.file = _encoderConfig;
+  if (_rtcEngine.videoFeed == eVIDEO_FEED.kFILE)
+  { 
+    await SetFileVideoFeed(_VideoEncoderConfig.file.mediaStream);
+    if (_LocalVideoPlayConfig.localPlayObj)
+    {
+      EnableLocalVideo(_LocalVideoPlayConfig.localPlayObj, true);
+    }
+  }
+
+  if (_callback)
+  {
+    _callback();
+  }
+  _Log(_VideoEncoderConfig.file);
 }
