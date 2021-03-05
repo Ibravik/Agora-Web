@@ -17,10 +17,12 @@ var screenEncoder = {
   width: 1920,
   degradationPreference: eDEGRADATION_PREFERENCE.kQUALITY
 };
-var videoEncoder = {
+var fileEncoder = {
   bitrateMax: 4500,
   bitrateMin: 4000,
   frameRate: 10,
+  height: 1080,
+  width: 1920,
   degradationPreference: eDEGRADATION_PREFERENCE.kQUALITY,
   source: "videos/vid1.mp4",
   mediaStream: null
@@ -88,21 +90,8 @@ function RemoveLocalUI() {
 
 function UpdateVideoEncoderConfig(_config) {
   encoderConfig = _config;
-  if (videoSource == eVIDEO_FEED.kFILE) {
-    $("#HighEncoderWidthLabel").hide("slow");
-    $("#HighEncoderHeightLabel").hide("slow");
-    $("#HighEncoderWidth").hide("slow");
-    $("#HighEncoderHeight").hide("slow");
-  }
-  else {
-    $("#HighEncoderWidthLabel").show("slow");
-    $("#HighEncoderHeightLabel").show("slow");
-    $("#HighEncoderWidth").show("slow");
-    $("#HighEncoderHeight").show("slow");
-    $("#HighEncoderWidth").prop("value", _config.width);
-    $("#HighEncoderHeight").prop("value", _config.height);
-  }
-
+  $("#HighEncoderWidth").prop("value", _config.width);
+  $("#HighEncoderHeight").prop("value", _config.height);
   $("#HighVideoFPS").prop("value", _config.frameRate);
   $("#HighVideoBitrateMin").prop("value", _config.bitrateMin);
   $("#HighVideoBitrateMax").prop("value", _config.bitrateMax);
@@ -125,11 +114,11 @@ function ShowSourceVideo(_switchFlag) {
     let videoPlayer = $("#VideoPlayer")[0];
 
     videoPlayer.pause();
-    $("#VideoSource").attr("src", videoEncoder.source);
+    $("#VideoSource").attr("src", fileEncoder.source);
     videoPlayer.load();
 
-    videoEncoder.mediaStream = videoPlayer.captureStream(videoEncoder.frameRate);
-    SetFileVideoFeed(videoEncoder.mediaStream, function () {
+    fileEncoder.mediaStream = videoPlayer.captureStream(fileEncoder.frameRate);
+    SetFileVideoFeed(fileEncoder.mediaStream, function () {
       EnableLocalVideo("local_stream_video", !localVideoMute);
     });
   }
@@ -499,7 +488,7 @@ $(function () {
 
   $("#VideoOptions").selectmenu({
     select: function (_event, _ui) {
-      videoEncoder.source = _ui.item.value;
+      fileEncoder.source = _ui.item.value;
       ShowSourceVideo(true);
     }
   });
@@ -565,8 +554,8 @@ $(function () {
     SetLowVideoEncoderConfiguration(lowVideoEncoder, function () {
       SetHighVideoEncoderConfiguration(cameraEncoder, function () {
         SetScreenEncoderConfiguration(screenEncoder, function () {
-          videoEncoder.mediaStream = $("#VideoPlayer")[0].captureStream(videoEncoder.frameRate);
-          SetFileEncoderConfiguration(videoEncoder, function () {
+          fileEncoder.mediaStream = $("#VideoPlayer")[0].captureStream(fileEncoder.frameRate);
+          SetFileEncoderConfiguration(fileEncoder, function () {
             $("#ApplyEncoding").button("option", "disabled", false);
           });
         });
@@ -662,7 +651,7 @@ $(function () {
           });
           break;
         case eVIDEO_FEED.kFILE:
-          UpdateVideoEncoderConfig(videoEncoder);
+          UpdateVideoEncoderConfig(fileEncoder);
           ShowLowVideoEncoderSettings(false);
           ShowSourceVideo(true);
           break;

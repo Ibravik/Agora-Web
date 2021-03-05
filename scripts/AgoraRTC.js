@@ -198,6 +198,8 @@ var _VideoEncoderConfig = {
     bitrateMax: 4500,
     bitrateMin: 4000,
     frameRate: 10,
+    height: 1080,
+    width: 1920,
     degradationPreference: eDEGRADATION_PREFERENCE.kQUALITY,
     source: "",
     mediaStream: null
@@ -1188,6 +1190,9 @@ async function SetCameraVideoFeed(_callback)
   // disable current video stream
   await _UnpublishTracks();
   
+  // change settings
+  await SetLowVideoEncoderConfiguration(_VideoEncoderConfig.low);
+
   // update feed flag
   _rtcEngine.videoFeed = eVIDEO_FEED.kCAMERA;
 
@@ -1238,6 +1243,9 @@ async function SetScreenVideoFeed(_callback)
 
   // disable current video stream
   await _UnpublishTracks();
+
+  // change settings
+  await SetLowVideoEncoderConfiguration(_VideoEncoderConfig.low);
 
   // update feed flag
   _rtcEngine.videoFeed = eVIDEO_FEED.kSCREEN;
@@ -1305,6 +1313,16 @@ async function SetFileVideoFeed(_mediaStream, _callback)
   // disable current video stream
   await _UnpublishTracks();
 
+  // change settings
+  let encoderConfig = {
+    bitrate: _VideoEncoderConfig.file.bitrateMax, 
+    framerate: _VideoEncoderConfig.file.frameRate, 
+    height: _VideoEncoderConfig.file.height, 
+    width: _VideoEncoderConfig.file.width, 
+    degradationPreference: _VideoEncoderConfig.file.degradationPreference
+  };
+  _rtcEngine.client.setLowStreamParameter(encoderConfig);
+  
   // update feed flag
   _rtcEngine.videoFeed = eVIDEO_FEED.kFILE;
 
